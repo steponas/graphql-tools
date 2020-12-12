@@ -20,6 +20,7 @@ import AggregateError from '@ardatan/aggregate-error';
 import { getBatchingExecutor } from '@graphql-tools/batch-execute';
 
 import {
+  AsyncExecutionResult,
   ExecutionParams,
   ExecutionResult,
   Executor,
@@ -174,24 +175,12 @@ export function delegateRequest<TContext = Record<string, any>, TArgs = any>({
     });
 
     if (isPromise(executionResult)) {
-      return executionResult.then(originalResultOrAsyncIterable => {
-        if (isAsyncIterable(originalResultOrAsyncIterable)) {
-          return asyncIterableToIncrementalResult(originalResultOrAsyncIterable).then(initialResult => {
-            return transformer.transformResult(initialResult);
-          });
-        } else {
-          return transformer.transformResult(originalResultOrAsyncIterable);
-        }
-      });
+      return executionResult.then(resolvedResult =>
+        handleExecutionResult(resolvedResult, originalResult => transformer.transformResult(originalResult))
+      );
     }
 
-    if (isAsyncIterable(executionResult)) {
-      return asyncIterableToIncrementalResult(executionResult).then(initialResult => {
-        return transformer.transformResult(initialResult);
-      });
-    } else {
-      return transformer.transformResult(executionResult);
-    }
+    return handleExecutionResult(executionResult, originalResult => transformer.transformResult(originalResult));
   }
 
   const subscriber =
@@ -201,19 +190,37 @@ export function delegateRequest<TContext = Record<string, any>, TArgs = any>({
     ...processedRequest,
     context,
     info,
-  }).then((subscriptionResult: AsyncIterableIterator<ExecutionResult> | ExecutionResult) => {
-    if (Symbol.asyncIterator in subscriptionResult) {
-      // "subscribe" to the subscription result and map the result through the transforms
-      return mapAsyncIterator<ExecutionResult, any>(
-        subscriptionResult as AsyncIterableIterator<ExecutionResult>,
-        originalResult => ({
-          [targetFieldName]: transformer.transformResult(originalResult),
-        })
-      );
-    }
+  }).then((subscriptionResult: AsyncIterableIterator<ExecutionResult> | ExecutionResult) =>
+    handleSubscriptionResult(subscriptionResult, targetFieldName, originalResult =>
+      transformer.transformResult(originalResult)
+    )
+  );
+}
 
-    return transformer.transformResult(subscriptionResult as ExecutionResult);
-  });
+function handleExecutionResult(
+  executionResult: ExecutionResult | AsyncIterableIterator<AsyncExecutionResult>,
+  resultTransformer: (originalResult: ExecutionResult) => any
+): any {
+  if (isAsyncIterable(executionResult)) {
+    return asyncIterableToIncrementalResult(executionResult).then(initialResult => resultTransformer(initialResult));
+  }
+
+  return resultTransformer(executionResult);
+}
+
+function handleSubscriptionResult(
+  subscriptionResult: AsyncIterableIterator<ExecutionResult> | ExecutionResult,
+  targetFieldName: string,
+  resultTransformer: (originalResult: ExecutionResult) => any
+): AsyncIterableIterator<ExecutionResult> {
+  if (isAsyncIterable(subscriptionResult)) {
+    // "subscribe" to the subscription result and map the result through the transforms
+    return mapAsyncIterator<ExecutionResult, any>(subscriptionResult, originalResult => ({
+      [targetFieldName]: resultTransformer(originalResult),
+    }));
+  }
+
+  return resultTransformer(subscriptionResult);
 }
 
 const emptyObject = {};
