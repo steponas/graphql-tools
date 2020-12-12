@@ -19,7 +19,13 @@ import AggregateError from '@ardatan/aggregate-error';
 
 import { getBatchingExecutor } from '@graphql-tools/batch-execute';
 
-import { mapAsyncIterator, ExecutionResult, Executor, ExecutionParams } from '@graphql-tools/utils';
+import {
+  ExecutionParams,
+  ExecutionResult,
+  Executor,
+  isAsyncIterable,
+  mapAsyncIterator,
+} from '@graphql-tools/utils';
 
 import { IDelegateToSchemaOptions, IDelegateRequestOptions, SubschemaConfig, StitchingInfo, Transform } from './types';
 
@@ -28,6 +34,7 @@ import { Subschema } from './Subschema';
 import { createRequestFromInfo, getDelegatingOperation } from './createRequest';
 import { Transformer } from './Transformer';
 import { memoize2 } from './memoize';
+import { asyncIterableToIncrementalResult } from './incrementalResult';
 
 export function delegateToSchema<TContext = Record<string, any>, TArgs = any>(
   options: IDelegateToSchemaOptions<TContext, TArgs>
@@ -147,14 +154,17 @@ export function delegateRequest<TContext = Record<string, any>, TArgs = any>({
     let executor: Executor =
       subschemaConfig?.executor || createDefaultExecutor(targetSchema, subschemaConfig?.rootValue || targetRootValue);
 
+    // batching will be stage 2 of @defer/@stream
     if (subschemaConfig?.batch) {
       const batchingOptions = subschemaConfig?.batchingOptions;
       executor = getBatchingExecutor(
         context,
-        executor,
+        executor as <TReturn, TArgs, TContext>(
+          params: ExecutionParams<TArgs, TContext>
+        ) => ExecutionResult<TReturn> | Promise<ExecutionResult<TReturn>>,
         batchingOptions?.dataLoaderOptions,
         batchingOptions?.extensionsReducer
-      );
+      ) as Executor;
     }
 
     const executionResult = executor({
@@ -164,11 +174,24 @@ export function delegateRequest<TContext = Record<string, any>, TArgs = any>({
     });
 
     if (isPromise(executionResult)) {
-      return executionResult.then(originalResult => {
-        return transformer.transformResult(originalResult);
+      return executionResult.then(originalResultOrAsyncIterable => {
+        if (isAsyncIterable(originalResultOrAsyncIterable)) {
+          return asyncIterableToIncrementalResult(originalResultOrAsyncIterable).then(initialResult => {
+            return transformer.transformResult(initialResult);
+          });
+        } else {
+          return transformer.transformResult(originalResultOrAsyncIterable);
+        }
       });
     }
-    return transformer.transformResult(executionResult);
+
+    if (isAsyncIterable(executionResult)) {
+      return asyncIterableToIncrementalResult(executionResult).then(initialResult => {
+        return transformer.transformResult(initialResult);
+      });
+    } else {
+      return transformer.transformResult(executionResult);
+    }
   }
 
   const subscriber =

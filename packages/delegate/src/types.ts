@@ -16,8 +16,16 @@ import DataLoader from 'dataloader';
 
 import { ExecutionParams, ExecutionResult, Executor, Request, Subscriber, TypeMap } from '@graphql-tools/utils';
 
+import {
+  OBJECT_SUBSCHEMA_SYMBOL,
+  FIELD_SUBSCHEMA_MAP_SYMBOL,
+  UNPATHED_ERRORS_SYMBOL,
+  RECEIVER_SYMBOL,
+  PATH_SYMBOL,
+} from './symbols';
+
 import { Subschema } from './Subschema';
-import { OBJECT_SUBSCHEMA_SYMBOL, FIELD_SUBSCHEMA_MAP_SYMBOL, UNPATHED_ERRORS_SYMBOL } from './symbols';
+import { Receiver } from './Receiver';
 
 export type SchemaTransform = (
   originalWrappingSchema: GraphQLSchema,
@@ -195,4 +203,12 @@ export interface ExternalObject<TContext = Record<string, any>> {
   [OBJECT_SUBSCHEMA_SYMBOL]: GraphQLSchema | SubschemaConfig<any, any, any, TContext>;
   [FIELD_SUBSCHEMA_MAP_SYMBOL]: Record<string, GraphQLSchema | SubschemaConfig<any, any, any, TContext>>;
   [UNPATHED_ERRORS_SYMBOL]: Array<GraphQLError>;
+  [RECEIVER_SYMBOL]?: Receiver;
+  [PATH_SYMBOL]?: number;
+}
+
+export interface IncrementalResult {
+  key: any;
+  [RECEIVER_SYMBOL]: Receiver;
+  [PATH_SYMBOL]: number;
 }
