@@ -29,14 +29,21 @@ import {
   mapAsyncIterator,
 } from '@graphql-tools/utils';
 
-import { IDelegateToSchemaOptions, IDelegateRequestOptions, SubschemaConfig, StitchingInfo, Transform } from './types';
+import {
+  DelegationContext,
+  IDelegateToSchemaOptions,
+  IDelegateRequestOptions,
+  SubschemaConfig,
+  StitchingInfo,
+  Transform,
+} from './types';
 
 import { isSubschemaConfig } from './subschemaConfig';
 import { Subschema } from './Subschema';
 import { createRequestFromInfo, getDelegatingOperation } from './createRequest';
 import { Transformer } from './Transformer';
 import { memoize2 } from './memoize';
-import { asyncIterableToIncrementalResult } from './incrementalResult';
+import { Receiver } from './Receiver';
 
 export function delegateToSchema<TContext = Record<string, any>, TArgs = any>(
   options: IDelegateToSchemaOptions<TContext, TArgs>
@@ -128,7 +135,7 @@ export function delegateRequest<TContext = Record<string, any>, TArgs = any>({
     transforms
   );
 
-  const delegationContext = {
+  const delegationContext: DelegationContext = {
     subschema: subschemaOrSubschemaConfig,
     targetSchema,
     operation: targetOperation,
@@ -177,18 +184,14 @@ export function delegateRequest<TContext = Record<string, any>, TArgs = any>({
 
     if (isPromise(executionResult)) {
       return executionResult.then(resolvedResult =>
-        handleExecutionResult(
-          resolvedResult,
-          originalResult => transformer.transformResult(originalResult),
-          info ? responsePathAsArray(info.path).length - 1 : 0
+        handleExecutionResult(resolvedResult, delegationContext, originalResult =>
+          transformer.transformResult(originalResult)
         )
       );
     }
 
-    return handleExecutionResult(
-      executionResult,
-      originalResult => transformer.transformResult(originalResult),
-      info ? responsePathAsArray(info.path).length - 1 : 0
+    return handleExecutionResult(executionResult, delegationContext, originalResult =>
+      transformer.transformResult(originalResult)
     );
   }
 
@@ -208,11 +211,18 @@ export function delegateRequest<TContext = Record<string, any>, TArgs = any>({
 
 function handleExecutionResult(
   executionResult: ExecutionResult | AsyncIterableIterator<AsyncExecutionResult>,
-  resultTransformer: (originalResult: ExecutionResult) => any,
-  pathPrefix: number
+  delegationContext: DelegationContext,
+  resultTransformer: (originalResult: ExecutionResult) => any
 ): any {
   if (isAsyncIterable(executionResult)) {
-    return asyncIterableToIncrementalResult(executionResult, resultTransformer, pathPrefix);
+    const { info } = delegationContext;
+
+    const initialResultDepth = info ? responsePathAsArray(info.path).length - 1 : 0;
+    const receiver = new Receiver(executionResult, resultTransformer, initialResultDepth);
+
+    delegationContext.receiver = receiver;
+
+    return receiver.getInitialResult();
   }
 
   return resultTransformer(executionResult);

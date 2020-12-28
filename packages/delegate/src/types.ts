@@ -21,7 +21,6 @@ import {
   FIELD_SUBSCHEMA_MAP_SYMBOL,
   UNPATHED_ERRORS_SYMBOL,
   RECEIVER_SYMBOL,
-  PATH_PREFIX_SYMBOL,
 } from './symbols';
 
 import { Subschema } from './Subschema';
@@ -62,6 +61,7 @@ export interface DelegationContext {
   transforms: Array<Transform>;
   transformedSchema: GraphQLSchema;
   skipTypeMerging: boolean;
+  receiver?: Receiver;
 }
 
 export type DelegationBinding = (delegationContext: DelegationContext) => Array<Transform>;
@@ -204,11 +204,4 @@ export interface ExternalObject<TContext = Record<string, any>> {
   [FIELD_SUBSCHEMA_MAP_SYMBOL]: Record<string, GraphQLSchema | SubschemaConfig<any, any, any, TContext>>;
   [UNPATHED_ERRORS_SYMBOL]: Array<GraphQLError>;
   [RECEIVER_SYMBOL]?: Receiver;
-  [PATH_PREFIX_SYMBOL]?: number;
-}
-
-export interface IncrementalResult {
-  key: any;
-  [RECEIVER_SYMBOL]: Receiver;
-  [PATH_PREFIX_SYMBOL]: number;
 }
