@@ -163,7 +163,6 @@ export function delegateRequest<TContext = Record<string, any>, TArgs = any>({
     let executor: Executor =
       subschemaConfig?.executor || createDefaultExecutor(targetSchema, subschemaConfig?.rootValue || targetRootValue);
 
-    // batching will be stage 2 of @defer/@stream
     if (subschemaConfig?.batch) {
       const batchingOptions = subschemaConfig?.batchingOptions;
       executor = getBatchingExecutor(
@@ -171,6 +170,7 @@ export function delegateRequest<TContext = Record<string, any>, TArgs = any>({
         executor as <TReturn, TArgs, TContext>(
           params: ExecutionParams<TArgs, TContext>
         ) => ExecutionResult<TReturn> | Promise<ExecutionResult<TReturn>>,
+        targetSchema,
         batchingOptions?.dataLoaderOptions,
         batchingOptions?.extensionsReducer
       ) as Executor;
