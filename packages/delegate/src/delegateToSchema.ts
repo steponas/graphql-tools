@@ -43,7 +43,7 @@ import { createRequestFromInfo, getDelegatingOperation } from './createRequest';
 import { Transformer } from './Transformer';
 import { memoize2 } from './memoize';
 import { Receiver } from './Receiver';
-import { externalValueFromResult } from './externalValueFromResult';
+import { externalValueFromResult } from './externalValues';
 
 export function delegateToSchema<TContext = Record<string, any>, TArgs = any>(
   options: IDelegateToSchemaOptions<TContext, TArgs>
@@ -136,7 +136,7 @@ export function delegateRequest<TContext = Record<string, any>, TArgs = any>({
   );
 
   const delegationContext: DelegationContext = {
-    subschema: subschemaOrSubschemaConfig,
+    subschema: subschemaConfig ?? targetSchema,
     targetSchema,
     operation: targetOperation,
     fieldName: targetFieldName,
@@ -149,7 +149,6 @@ export function delegateRequest<TContext = Record<string, any>, TArgs = any>({
     transforms: allTransforms,
     transformedSchema: transformedSchema ?? (subschemaConfig as Subschema)?.transformedSchema ?? targetSchema,
     skipTypeMerging,
-    deferredSelectionSets: Object.create(null),
   };
 
   const transformer = new Transformer(delegationContext, binding);
