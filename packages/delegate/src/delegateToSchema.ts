@@ -107,7 +107,6 @@ export function delegateRequest<TContext = Record<string, any>, TArgs = any>({
   transforms = [],
   transformedSchema,
   skipValidation,
-  skipTypeMerging,
   binding,
 }: IDelegateRequestOptions<TContext, TArgs>) {
   let operationDefinition: OperationDefinitionNode;
@@ -148,7 +147,6 @@ export function delegateRequest<TContext = Record<string, any>, TArgs = any>({
     onLocatedError,
     transforms: allTransforms,
     transformedSchema: transformedSchema ?? (subschemaConfig as Subschema)?.transformedSchema ?? targetSchema,
-    skipTypeMerging,
   };
 
   const transformer = new Transformer(delegationContext, binding);
