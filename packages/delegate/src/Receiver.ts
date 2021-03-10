@@ -11,6 +11,10 @@ import {
   SelectionSetNode,
 } from 'graphql';
 
+import DataLoader from 'dataloader';
+
+import { Repeater } from '@repeaterjs/repeater';
+
 import { AsyncExecutionResult } from '@graphql-tools/utils';
 import { InMemoryPubSub } from '@graphql-tools/pubsub';
 
@@ -18,8 +22,6 @@ import { DelegationContext, ExternalObject } from './types';
 import { getReceiver, getSubschema, getUnpathedErrors, mergeExternalObjects } from './externalObjects';
 import { resolveExternalValue } from './resolveExternalValue';
 import { externalValueFromResult, externalValueFromPatchResult } from './externalValues';
-import DataLoader from 'dataloader';
-import { Repeater } from '@repeaterjs/repeater';
 
 export class Receiver {
   private readonly asyncIterable: AsyncIterable<AsyncExecutionResult>;

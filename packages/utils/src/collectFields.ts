@@ -77,7 +77,7 @@ export function collectFields(
  * Determines if a field should be included based on the @include and @skip
  * directives, where @skip has higher precedence than @include.
  */
-export function shouldIncludeNode(
+function shouldIncludeNode(
   exeContext: GraphQLExecutionContext,
   node: FragmentSpreadNode | FieldNode | InlineFragmentNode
 ): boolean {
@@ -99,7 +99,7 @@ export function shouldIncludeNode(
 /**
  * Determines if a fragment is applicable to the given type.
  */
-export function doesFragmentConditionMatch(
+function doesFragmentConditionMatch(
   exeContext: GraphQLExecutionContext,
   fragment: FragmentDefinitionNode | InlineFragmentNode,
   type: GraphQLObjectType
@@ -121,6 +121,6 @@ export function doesFragmentConditionMatch(
 /**
  * Implements the logic to compute the key of a given field's entry
  */
-export function getFieldEntryKey(node: FieldNode): string {
+function getFieldEntryKey(node: FieldNode): string {
   return node.alias ? node.alias.value : node.name.value;
 }
