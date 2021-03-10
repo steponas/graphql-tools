@@ -13,7 +13,7 @@ import { SubschemaConfig, ExternalObject } from './types';
 import {
   OBJECT_SUBSCHEMA_SYMBOL,
   INITIAL_POSSIBLE_FIELDS,
-  PARENT_INFO_SYMBOL,
+  INFO_SYMBOL,
   FIELD_SUBSCHEMA_MAP_SYMBOL,
   UNPATHED_ERRORS_SYMBOL,
   RECEIVER_MAP_SYMBOL,
@@ -45,7 +45,7 @@ export function annotateExternalObject(
   Object.defineProperties(object, {
     [OBJECT_SUBSCHEMA_SYMBOL]: { value: subschema },
     [INITIAL_POSSIBLE_FIELDS]: { value: initialPossibleFields },
-    [PARENT_INFO_SYMBOL]: { value: info },
+    [INFO_SYMBOL]: { value: info },
     [FIELD_SUBSCHEMA_MAP_SYMBOL]: { value: Object.create(null) },
     [UNPATHED_ERRORS_SYMBOL]: { value: errors },
     [RECEIVER_MAP_SYMBOL]: { value: receiverMap },
@@ -64,7 +64,7 @@ export function getInitialPossibleFields(object: ExternalObject): GraphQLFieldMa
 }
 
 export function getInfo(object: ExternalObject): GraphQLResolveInfo {
-  return object[PARENT_INFO_SYMBOL];
+  return object[INFO_SYMBOL];
 }
 
 export function getUnpathedErrors(object: ExternalObject): Array<GraphQLError> {

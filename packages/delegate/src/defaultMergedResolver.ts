@@ -33,25 +33,19 @@ export function defaultMergedResolver(
     return defaultFieldResolver(parent, args, context, info);
   }
 
-  const subschema = getSubschema(parent);
-
   const responseKey = getResponseKeyFromInfo(info);
-  const data = parent[responseKey];
-  if (data !== undefined) {
-    const unpathedErrors = getUnpathedErrors(parent);
-    const receiver = getReceiver(parent, subschema);
-    return resolveExternalValue(data, unpathedErrors, subschema, context, info, receiver);
-  }
 
-  const fieldName = info.fieldNodes[0].name.value;
-  if (fieldName in getInitialPossibleFields(parent)) {
-    const receiver = getReceiver(parent, subschema);
-    if (receiver !== undefined) {
-      return receiver.request(info);
+  const initialPossibleFields = getInitialPossibleFields(parent);
+
+  if (initialPossibleFields === undefined) {
+    const data = parent[responseKey];
+    if (data !== undefined) {
+      const unpathedErrors = getUnpathedErrors(parent);
+      const fieldSubschema = getSubschema(parent, responseKey);
+      return resolveExternalValue(data, unpathedErrors, fieldSubschema, context, info);
     }
-
-    // throw error?
-    return;
+  } else if (info.fieldNodes[0].name.value in initialPossibleFields) {
+    return resolveField(parent, responseKey, context, info);
   }
 
   return getMergedParent(parent, context, info).then(mergedParent =>
@@ -65,17 +59,17 @@ function resolveField(
   context: Record<string, any>,
   info: GraphQLResolveInfo
 ): any {
-  const data = parent[responseKey];
   const fieldSubschema = getSubschema(parent, responseKey);
   const receiver = getReceiver(parent, fieldSubschema);
 
+  if (receiver !== undefined) {
+    return receiver.request(info);
+  }
+
+  const data = parent[responseKey];
   if (data !== undefined) {
     const unpathedErrors = getUnpathedErrors(parent);
     return resolveExternalValue(data, unpathedErrors, fieldSubschema, context, info, receiver);
-  }
-
-  if (receiver !== undefined) {
-    return receiver.request(info);
   }
 
   // throw error?

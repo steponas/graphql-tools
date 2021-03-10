@@ -6,6 +6,7 @@ import WrapConcreteTypes from './transforms/WrapConcreteTypes';
 import FilterToSchema from './transforms/FilterToSchema';
 import AddTypename from './transforms/AddTypename';
 import AddArgumentsAsVariables from './transforms/AddArgumentsAsVariables';
+import StoreAsyncSelectionSets from './transforms/StoreAsyncSelectionSets';
 
 export function defaultDelegationBinding(delegationContext: DelegationContext): Array<Transform> {
   const delegationTransforms: Array<Transform> = [];
@@ -26,7 +27,7 @@ export function defaultDelegationBinding(delegationContext: DelegationContext): 
     delegationTransforms.push(new ExpandAbstractTypes());
   }
 
-  delegationTransforms.push(new WrapConcreteTypes());
+  delegationTransforms.push(new WrapConcreteTypes(), new StoreAsyncSelectionSets());
 
   const transforms = delegationContext.transforms;
   if (transforms != null) {

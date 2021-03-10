@@ -178,7 +178,16 @@ export function wrapFieldNode(
       },
       selectionSet: {
         kind: Kind.SELECTION_SET,
-        selections: [acc],
+        selections: [
+          {
+            kind: Kind.FIELD,
+            name: {
+              kind: Kind.NAME,
+              value: '__typename',
+            },
+          },
+          acc,
+        ],
       },
       arguments: fieldNode.arguments.filter(arg => argLevels[arg.name.value] === index),
     }),

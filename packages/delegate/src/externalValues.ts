@@ -1,4 +1,4 @@
-import { GraphQLError, responsePathAsArray, locatedError } from 'graphql';
+import { GraphQLError, responsePathAsArray, locatedError, GraphQLResolveInfo } from 'graphql';
 
 import AggregateError from '@ardatan/aggregate-error';
 
@@ -24,9 +24,19 @@ export function externalValueFromResult(
 export function externalValueFromPatchResult(
   originalResult: ExecutionPatchResult,
   delegationContext: DelegationContext,
+  info: GraphQLResolveInfo,
   receiver: Receiver
 ): any {
-  return externalValueFromDataAndErrors(originalResult.data, originalResult.errors ?? [], delegationContext, receiver);
+  return externalValueFromDataAndErrors(
+    originalResult.data,
+    originalResult.errors ?? [],
+    {
+      ...delegationContext,
+      info,
+      returnType: info.returnType,
+    },
+    receiver
+  );
 }
 
 function externalValueFromDataAndErrors(
@@ -35,7 +45,7 @@ function externalValueFromDataAndErrors(
   delegationContext: DelegationContext,
   receiver?: Receiver
 ): any {
-  const { context, info, subschema, returnType, onLocatedError } = delegationContext;
+  const { context, subschema, onLocatedError, returnType, info } = delegationContext;
 
   const { data: newData, unpathedErrors } = mergeDataAndErrors(
     data,

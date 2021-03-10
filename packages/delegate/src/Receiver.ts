@@ -1,27 +1,40 @@
-import { ExecutionPatchResult, ExecutionResult, GraphQLResolveInfo, responsePathAsArray } from 'graphql';
+import {
+  ExecutionPatchResult,
+  ExecutionResult,
+  getNamedType,
+  GraphQLList,
+  GraphQLOutputType,
+  GraphQLResolveInfo,
+  isCompositeType,
+  Kind,
+  responsePathAsArray,
+  SelectionSetNode,
+} from 'graphql';
 
 import { AsyncExecutionResult } from '@graphql-tools/utils';
 import { InMemoryPubSub } from '@graphql-tools/pubsub';
 
 import { DelegationContext, ExternalObject } from './types';
-import { getReceiver, getSubschema, getUnpathedErrors } from './externalObjects';
+import { getReceiver, getSubschema, getUnpathedErrors, mergeExternalObjects } from './externalObjects';
 import { resolveExternalValue } from './resolveExternalValue';
 import { externalValueFromResult, externalValueFromPatchResult } from './externalValues';
 import DataLoader from 'dataloader';
+import { Repeater } from '@repeaterjs/repeater';
 
 export class Receiver {
   private readonly asyncIterable: AsyncIterable<AsyncExecutionResult>;
   private readonly delegationContext: DelegationContext;
   private readonly fieldName: string;
   private readonly context: Record<string, any>;
+  private readonly asyncSelectionSets: Record<string, SelectionSetNode>;
   private readonly resultTransformer: (originalResult: ExecutionResult) => any;
   private readonly initialResultDepth: number;
   private readonly pubsub: InMemoryPubSub<ExternalObject>;
-  private externalValues: Record<string, Array<any>>;
+  private deferredPatches: Record<string, Array<ExecutionPatchResult>>;
+  private streamedPatches: Record<string, Record<number, Array<ExecutionPatchResult>>>;
+  private cache: Record<string, any>;
   private loaders: Record<string, DataLoader<GraphQLResolveInfo, any>>;
   private infos: Record<string, Record<string, GraphQLResolveInfo>>;
-  private iterating: boolean;
-  private numRequests: number;
 
   constructor(
     asyncIterable: AsyncIterable<AsyncExecutionResult>,
@@ -31,27 +44,31 @@ export class Receiver {
     this.asyncIterable = asyncIterable;
 
     this.delegationContext = delegationContext;
-    const { fieldName, context, info } = delegationContext;
+    const { fieldName, context, info, asyncSelectionSets } = delegationContext;
 
     this.fieldName = fieldName;
     this.context = context;
+    this.asyncSelectionSets = asyncSelectionSets;
 
     this.resultTransformer = resultTransformer;
     this.initialResultDepth = info ? responsePathAsArray(info.path).length - 1 : 0;
     this.pubsub = new InMemoryPubSub();
 
-    this.externalValues = Object.create(null);
+    this.deferredPatches = Object.create(null);
+    this.streamedPatches = Object.create(null);
+    this.cache = Object.create(null);
     this.loaders = Object.create(null);
     this.infos = Object.create(null);
-    this.iterating = false;
-    this.numRequests = 0;
   }
 
   public async getInitialResult(): Promise<ExecutionResult> {
     const asyncIterator = this.asyncIterable[Symbol.asyncIterator]();
     const payload = await asyncIterator.next();
     const initialResult = externalValueFromResult(this.resultTransformer(payload.value), this.delegationContext, this);
-    this.externalValues[this.fieldName] = [initialResult];
+    this.cache[this.fieldName] = initialResult;
+
+    this._iterate();
+
     return initialResult;
   }
 
@@ -85,76 +102,185 @@ export class Receiver {
     if (infosByParentKey === undefined) {
       infosByParentKey = this.infos[parentKey] = Object.create(null);
     }
-    infosByParentKey[responseKey] = combinedInfo;
 
-    const parents = this.externalValues[parentKey];
-    if (parents !== undefined) {
-      parents.forEach(parent => {
-        const data = parent[responseKey];
-        if (data !== undefined) {
-          const unpathedErrors = getUnpathedErrors(parent);
-          const subschema = getSubschema(parent, responseKey);
-          const receiver = getReceiver(parent, subschema);
-          this.onNewExternalValue(
-            pathKey,
-            resolveExternalValue(data, unpathedErrors, subschema, this.context, combinedInfo, receiver)
-          );
-        }
-      });
+    if (infosByParentKey[responseKey] === undefined) {
+      infosByParentKey[responseKey] = combinedInfo;
+      this.onNewInfo(pathKey, combinedInfo);
     }
 
-    const newExternalValue = this.externalValues[pathKey];
-    if (newExternalValue !== undefined) {
-      return newExternalValue;
+    const parent = this.cache[parentKey];
+    if (parent !== undefined) {
+      const data = parent[responseKey];
+      if (data !== undefined) {
+        const unpathedErrors = getUnpathedErrors(parent);
+        const subschema = getSubschema(parent, responseKey);
+        const receiver = getReceiver(parent, subschema);
+        this.onNewExternalValue(
+          pathKey,
+          resolveExternalValue(data, unpathedErrors, subschema, this.context, combinedInfo, receiver),
+          isCompositeType(getNamedType(combinedInfo.returnType))
+            ? {
+                kind: Kind.SELECTION_SET,
+                selections: [].concat(...combinedInfo.fieldNodes.map(fieldNode => fieldNode.selectionSet.selections)),
+              }
+            : undefined
+        );
+      }
     }
 
-    const asyncIterable = this.pubsub.subscribe(pathKey);
+    if (fieldShouldStream(combinedInfo)) {
+      return infos.map(
+        () =>
+          new Repeater(async (push, stop) => {
+            let initialValues: Array<any> = this.cache[pathKey];
+            if (initialValues !== undefined) {
+              initialValues.forEach(async value => push(value));
+            } else {
+              const payload = await this.pubsub.subscribe(pathKey).next();
+              initialValues = payload.value;
+              if (initialValues === undefined) {
+                return;
+              }
+            }
 
-    this.numRequests++;
-    if (!this.iterating) {
-      this._iterate();
+            let index = initialValues.length;
+            while (true) {
+              const listMemberKey = `${pathKey}.${index++}`;
+
+              let listMember = this.cache[listMemberKey];
+              if (listMember !== undefined) {
+                await push(listMember);
+                continue;
+              }
+
+              const listMemberPayload = await this.pubsub.subscribe(listMemberKey).next();
+              listMember = listMemberPayload.value;
+              if (listMember === undefined) {
+                break;
+              }
+
+              await push(listMember);
+            }
+
+            stop();
+          })
+      );
     }
 
-    const payload = await asyncIterable.next();
-    this.numRequests--;
+    const externalValue = this.cache[pathKey];
+    if (externalValue !== undefined) {
+      return new Array(infos.length).fill(externalValue);
+    }
+
+    const payload = await this.pubsub.subscribe(pathKey).next();
 
     return new Array(infos.length).fill(payload.value);
   }
 
   private async _iterate(): Promise<void> {
-    this.iterating = true;
     const iterator = this.asyncIterable[Symbol.asyncIterator]();
 
     let hasNext = true;
-    while (hasNext && this.numRequests) {
+    while (hasNext) {
       const payload = (await iterator.next()) as IteratorResult<ExecutionPatchResult, ExecutionPatchResult>;
 
       hasNext = !payload.done;
       const asyncResult = payload.value;
 
-      if (asyncResult != null && asyncResult.path?.[0] === this.fieldName) {
-        const transformedResult = this.resultTransformer(asyncResult);
-        const newExternalValue = externalValueFromPatchResult(transformedResult, this.delegationContext, this);
-
-        const pathKey = asyncResult.path.join('.');
-
-        this.onNewExternalValue(pathKey, newExternalValue);
+      if (asyncResult == null) {
+        continue;
       }
-    }
-    this.iterating = false;
 
-    if (!hasNext) {
-      this.pubsub.close();
+      const path = asyncResult.path;
+
+      if (path[0] !== this.fieldName) {
+        // TODO: throw error?
+        continue;
+      }
+
+      const transformedResult = this.resultTransformer(asyncResult);
+
+      if (path.length === 1) {
+        const newExternalValue = externalValueFromPatchResult(
+          transformedResult,
+          this.delegationContext,
+          this.delegationContext.info,
+          this
+        );
+        const pathKey = path.join('.');
+        this.onNewExternalValue(pathKey, newExternalValue, this.asyncSelectionSets[asyncResult.label]);
+        continue;
+      }
+
+      const lastPathSegment = path[path.length - 1];
+      const isStreamPatch = typeof lastPathSegment === 'number';
+      if (isStreamPatch) {
+        const parentPath = path.slice();
+        const index = parentPath.pop();
+        const responseKey = parentPath.pop();
+        const parentPathKey = parentPath.join('.');
+        const pathKey = `${parentPathKey}.${responseKey}`;
+        const info = this.infos[parentPathKey]?.[responseKey];
+        if (info === undefined) {
+          const streamedPatches = this.streamedPatches[pathKey];
+          if (streamedPatches === undefined) {
+            this.streamedPatches[pathKey] = { [index]: [transformedResult] };
+            continue;
+          }
+
+          const indexPatches = streamedPatches[index];
+          if (indexPatches === undefined) {
+            streamedPatches[index] = [transformedResult];
+            continue;
+          }
+
+          indexPatches.push(transformedResult);
+          continue;
+        }
+
+        const newExternalValue = externalValueFromPatchResult(transformedResult, this.delegationContext, info, this);
+        this.onNewExternalValue(`${pathKey}.${index}`, newExternalValue, this.asyncSelectionSets[asyncResult.label]);
+        continue;
+      }
+
+      const parentPath = path.slice();
+      const responseKey = parentPath.pop();
+      const parentPathKey = parentPath.join('.');
+      const pathKey = `${parentPathKey}.${responseKey}`;
+      const info = this.infos[parentPathKey]?.[responseKey];
+      if (info === undefined) {
+        const deferredPatches = this.deferredPatches[pathKey];
+        if (deferredPatches === undefined) {
+          this.deferredPatches[pathKey] = [transformedResult];
+          continue;
+        }
+
+        deferredPatches.push(transformedResult);
+        continue;
+      }
+
+      const newExternalValue = externalValueFromPatchResult(transformedResult, this.delegationContext, info, this);
+      this.onNewExternalValue(`${pathKey}`, newExternalValue, this.asyncSelectionSets[asyncResult.label]);
     }
+
+    setTimeout(() => {
+      this.pubsub.close();
+    });
   }
 
-  private onNewExternalValue(pathKey: string, newExternalValue: any): void {
-    const externalValues = this.externalValues[pathKey];
-    if (externalValues === undefined) {
-      this.externalValues[pathKey] = [newExternalValue];
-    } else {
-      externalValues.push(newExternalValue);
-    }
+  private onNewExternalValue(pathKey: string, newExternalValue: any, selectionSet: SelectionSetNode): void {
+    const externalValue = this.cache[pathKey];
+    this.cache[pathKey] =
+      externalValue === undefined
+        ? newExternalValue
+        : mergeExternalObjects(
+            this.delegationContext.info.schema,
+            pathKey.split('.'),
+            externalValue.__typename,
+            externalValue,
+            [newExternalValue],
+            [selectionSet]
+          );
 
     const infosByParentKey = this.infos[pathKey];
     if (infosByParentKey !== undefined) {
@@ -167,11 +293,49 @@ export class Receiver {
           const receiver = getReceiver(newExternalValue, subschema);
           const subExternalValue = resolveExternalValue(data, unpathedErrors, subschema, this.context, info, receiver);
           const subPathKey = `${pathKey}.${responseKey}`;
-          this.onNewExternalValue(subPathKey, subExternalValue);
+          this.onNewExternalValue(
+            subPathKey,
+            subExternalValue,
+            isCompositeType(getNamedType(info.returnType))
+              ? {
+                  kind: Kind.SELECTION_SET,
+                  selections: [].concat(...info.fieldNodes.map(fieldNode => fieldNode.selectionSet.selections)),
+                }
+              : undefined
+          );
         }
       });
     }
 
     this.pubsub.publish(pathKey, newExternalValue);
   }
+
+  private onNewInfo(pathKey: string, info: GraphQLResolveInfo): void {
+    const deferredPatches = this.deferredPatches[pathKey];
+    if (deferredPatches !== undefined) {
+      deferredPatches.forEach(deferredPatch => {
+        const newExternalValue = externalValueFromPatchResult(deferredPatch, this.delegationContext, info, this);
+        this.onNewExternalValue(pathKey, newExternalValue, this.asyncSelectionSets[deferredPatch.label]);
+      });
+    }
+
+    const streamedPatches = this.streamedPatches[pathKey];
+    if (streamedPatches !== undefined) {
+      const listMemberInfo: GraphQLResolveInfo = {
+        ...info,
+        returnType: (info.returnType as GraphQLList<GraphQLOutputType>).ofType,
+      };
+      Object.entries(streamedPatches).forEach(([index, indexPatches]) => {
+        indexPatches.forEach(patch => {
+          const newExternalValue = externalValueFromPatchResult(patch, this.delegationContext, listMemberInfo, this);
+          this.onNewExternalValue(`${pathKey}.${index}`, newExternalValue, this.asyncSelectionSets[patch.label]);
+        });
+      });
+    }
+  }
+}
+
+function fieldShouldStream(info: GraphQLResolveInfo): boolean {
+  const directives = info.fieldNodes[0]?.directives;
+  return directives !== undefined && directives.some(directive => directive.name.value === 'stream');
 }

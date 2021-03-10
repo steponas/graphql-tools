@@ -27,7 +27,7 @@ describe('stream support', () => {
       stitchedSchema,
       `
         query {
-          test @stream(initialCount: 0)
+          test @stream(initialCount: 1)
         }
       `,
     );
@@ -41,16 +41,11 @@ describe('stream support', () => {
 
     expect(results[0]).toEqual({
       data: {
-        test: [],
+        test: ['test1'],
       },
       hasNext: true,
     });
     expect(results[1]).toEqual({
-      data: 'test1',
-      hasNext: true,
-      path: ['test', 0],
-    });
-    expect(results[2]).toEqual({
       data: 'test2',
       hasNext: false,
       path: ['test', 1],
@@ -86,7 +81,7 @@ describe('stream support', () => {
       `
         query {
           object {
-            test @stream(initialCount: 0)
+            test @stream(initialCount: 1)
           }
         }
       `,
@@ -100,17 +95,12 @@ describe('stream support', () => {
     }
 
     expect(results[0]).toEqual({
-      data: { object: { test: [] } },
+      data: { object: { test: ['test1'] } },
       hasNext: true,
     });
     expect(results[1]).toEqual({
-      data: 'test1',
-      hasNext: true,
-      path: ['object', 'test', 0],
-    });
-    expect(results[2]).toEqual({
       data: 'test2',
-      hasNext: false,
+      hasNext: true,
       path: ['object', 'test', 1],
     });
   });
