@@ -68,11 +68,6 @@ async function getMergedParentsFromInfos(
 
   const parentType = schema.getType(parentTypeName) as GraphQLObjectType;
 
-  const typeSelectionSet = stitchingInfo?.selectionSetsByType?.[parentTypeName];
-  if (typeSelectionSet !== undefined) {
-    addSelectionSetToMap(keyFieldNodes, schema, parentType, sourceSubschemaFields, typeSelectionSet);
-  }
-
   const fieldSelectionSets = stitchingInfo?.selectionSetsByField?.[parentTypeName];
   infos.forEach(info => {
     const fieldName = info.fieldName;

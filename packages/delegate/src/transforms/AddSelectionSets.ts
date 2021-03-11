@@ -11,12 +11,11 @@ export default class AddSelectionSets implements Transform {
   private readonly transformer: VisitSelectionSets;
 
   constructor(
-    selectionSetsByType: Record<string, SelectionSetNode>,
     selectionSetsByField: Record<string, Record<string, SelectionSetNode>>,
     dynamicSelectionSetsByField: Record<string, Record<string, Array<(node: FieldNode) => SelectionSetNode>>>
   ) {
     this.transformer = new VisitSelectionSets((node, typeInfo) =>
-      visitSelectionSet(node, typeInfo, selectionSetsByType, selectionSetsByField, dynamicSelectionSetsByField)
+      visitSelectionSet(node, typeInfo, selectionSetsByField, dynamicSelectionSetsByField)
     );
   }
 
@@ -32,7 +31,6 @@ export default class AddSelectionSets implements Transform {
 function visitSelectionSet(
   node: SelectionSetNode,
   typeInfo: TypeInfo,
-  selectionSetsByType: Record<string, SelectionSetNode>,
   selectionSetsByField: Record<string, Record<string, SelectionSetNode>>,
   dynamicSelectionSetsByField: Record<string, Record<string, Array<(node: FieldNode) => SelectionSetNode>>>
 ): SelectionSetNode {
@@ -43,11 +41,6 @@ function visitSelectionSet(
   if (parentType != null) {
     const parentTypeName = parentType.name;
     addSelectionsToMap(newSelections, node);
-
-    if (parentTypeName in selectionSetsByType) {
-      const selectionSet = selectionSetsByType[parentTypeName];
-      addSelectionsToMap(newSelections, selectionSet);
-    }
 
     if (parentTypeName in selectionSetsByField) {
       node.selections.forEach(selection => {

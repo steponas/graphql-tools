@@ -17,11 +17,7 @@ export function defaultDelegationBinding(delegationContext: DelegationContext): 
   if (stitchingInfo != null) {
     delegationTransforms.push(
       new ExpandAbstractTypes(),
-      new AddSelectionSets(
-        stitchingInfo.selectionSetsByType,
-        stitchingInfo.selectionSetsByField,
-        stitchingInfo.dynamicSelectionSetsByField
-      )
+      new AddSelectionSets(stitchingInfo.selectionSetsByField, stitchingInfo.dynamicSelectionSetsByField)
     );
   } else if (info != null) {
     delegationTransforms.push(new ExpandAbstractTypes());

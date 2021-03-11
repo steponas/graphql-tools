@@ -76,7 +76,6 @@ export function createStitchingInfo(
 
   return {
     subschemaMap,
-    selectionSetsByType: undefined,
     selectionSetsByField,
     dynamicSelectionSetsByField: undefined,
     mergedTypes,
@@ -223,7 +222,6 @@ export function completeStitchingInfo(
   resolvers: IResolvers,
   schema: GraphQLSchema
 ): StitchingInfo {
-  const selectionSetsByType = Object.create(null);
   const selectionSetsByField = stitchingInfo.selectionSetsByField;
   const dynamicSelectionSetsByField = Object.create(null);
 
@@ -278,7 +276,6 @@ export function completeStitchingInfo(
     });
   });
 
-  stitchingInfo.selectionSetsByType = selectionSetsByType;
   stitchingInfo.selectionSetsByField = selectionSetsByField;
   stitchingInfo.dynamicSelectionSetsByField = dynamicSelectionSetsByField;
 
