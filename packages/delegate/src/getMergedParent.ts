@@ -3,7 +3,6 @@ import {
   GraphQLObjectType,
   GraphQLResolveInfo,
   Kind,
-  SelectionNode,
   SelectionSetNode,
   responsePathAsArray,
   getNamedType,
@@ -118,11 +117,7 @@ function getMergedParentsFromFieldNodes(
     fieldNodes
   );
 
-  const { delegationMap, proxiableFieldNodes, unproxiableFieldNodes } = buildDelegationPlan(
-    mergedTypeInfo,
-    fieldNodes,
-    proxiableSubschemas
-  );
+  const { delegationMap, unproxiableFieldNodes } = buildDelegationPlan(mergedTypeInfo, fieldNodes, proxiableSubschemas);
 
   if (!delegationMap.size) {
     const mergedParentMap = Object.create(null);
@@ -134,43 +129,56 @@ function getMergedParentsFromFieldNodes(
   }
 
   const resultMap: Map<Promise<any> | any, SelectionSetNode> = new Map();
-  delegationMap.forEach((selectionSet: SelectionSetNode, s: Subschema) => {
+
+  const mergedParentMap = Object.create(null);
+  delegationMap.forEach((fieldNodes: Array<FieldNode>, s: Subschema) => {
     const resolver = mergedTypeInfo.resolvers.get(s);
+    const selectionSet = { kind: Kind.SELECTION_SET, selections: fieldNodes };
     let maybePromise = resolver(object, context, info, s, selectionSet);
     if (isPromise(maybePromise)) {
       maybePromise = maybePromise.then(undefined, error => error);
     }
     resultMap.set(maybePromise, selectionSet);
+
+    const promise = Promise.resolve(maybePromise).then(result =>
+      mergeExternalObjects(
+        info.schema,
+        responsePathAsArray(info.path),
+        object.__typename,
+        object,
+        [result],
+        [selectionSet]
+      )
+    );
+
+    fieldNodes.forEach(fieldNode => {
+      const responseKey = fieldNode.alias?.value ?? fieldNode.name.value;
+      mergedParentMap[responseKey] = promise;
+    });
   });
 
-  const promise = Promise.all(resultMap.keys()).then(results =>
-    mergeExternalObjects(
-      info.schema,
-      responsePathAsArray(info.path),
-      object.__typename,
-      object,
-      results,
-      Array.from(resultMap.values())
+  const nextPromise = Promise.all(resultMap.keys())
+    .then(results =>
+      mergeExternalObjects(
+        info.schema,
+        responsePathAsArray(info.path),
+        object.__typename,
+        object,
+        results,
+        Array.from(resultMap.values())
+      )
     )
-  );
-
-  const mergedParentMap = Object.create(null);
-  proxiableFieldNodes.forEach(fieldNode => {
-    const responseKey = fieldNode.alias?.value ?? fieldNode.name.value;
-    mergedParentMap[responseKey] = promise;
-  });
-
-  const nextPromise = promise.then(mergedParent =>
-    getMergedParentsFromFieldNodes(
-      mergedTypeInfo,
-      mergedParent,
-      unproxiableFieldNodes,
-      combineSubschemas(sourceSubschemaOrSourceSubschemas, proxiableSubschemas),
-      nonProxiableSubschemas,
-      context,
-      info
-    )
-  );
+    .then(mergedParent =>
+      getMergedParentsFromFieldNodes(
+        mergedTypeInfo,
+        mergedParent,
+        unproxiableFieldNodes,
+        combineSubschemas(sourceSubschemaOrSourceSubschemas, proxiableSubschemas),
+        nonProxiableSubschemas,
+        context,
+        info
+      )
+    );
 
   unproxiableFieldNodes.forEach(fieldNode => {
     const responseKey = fieldNode.alias?.value ?? fieldNode.name.value;
@@ -232,17 +240,15 @@ const buildDelegationPlan = memoize3(function (
   fieldNodes: Array<FieldNode>,
   proxiableSubschemas: Array<Subschema>
 ): {
-  delegationMap: Map<Subschema, SelectionSetNode>;
-  proxiableFieldNodes: Array<FieldNode>;
+  delegationMap: Map<Subschema, Array<FieldNode>>;
   unproxiableFieldNodes: Array<FieldNode>;
 } {
   const { uniqueFields, nonUniqueFields } = mergedTypeInfo;
-  const proxiableFieldNodes: Array<FieldNode> = [];
   const unproxiableFieldNodes: Array<FieldNode> = [];
 
   // 2. for each selection:
 
-  const delegationMap: Map<Subschema, Array<SelectionNode>> = new Map();
+  const delegationMap: Map<Subschema, Array<FieldNode>> = new Map();
   fieldNodes.forEach(fieldNode => {
     if (fieldNode.name.value === '__typename') {
       return;
@@ -257,7 +263,6 @@ const buildDelegationPlan = memoize3(function (
         return;
       }
 
-      proxiableFieldNodes.push(fieldNode);
       const existingSubschema = delegationMap.get(uniqueSubschema);
       if (existingSubschema != null) {
         existingSubschema.push(fieldNode);
@@ -283,7 +288,6 @@ const buildDelegationPlan = memoize3(function (
       return;
     }
 
-    proxiableFieldNodes.push(fieldNode);
     const existingSubschema = nonUniqueSubschemas.find(s => delegationMap.has(s));
     if (existingSubschema != null) {
       delegationMap.get(existingSubschema).push(fieldNode);
@@ -292,18 +296,8 @@ const buildDelegationPlan = memoize3(function (
     }
   });
 
-  const finalDelegationMap: Map<Subschema, SelectionSetNode> = new Map();
-
-  delegationMap.forEach((selections, subschema) => {
-    finalDelegationMap.set(subschema, {
-      kind: Kind.SELECTION_SET,
-      selections,
-    });
-  });
-
   return {
-    delegationMap: finalDelegationMap,
-    proxiableFieldNodes,
+    delegationMap,
     unproxiableFieldNodes,
   };
 });
