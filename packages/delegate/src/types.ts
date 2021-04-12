@@ -198,7 +198,8 @@ export interface StitchingInfo<TContext = Record<string, any>> {
 }
 
 export interface ExternalObject<TContext = Record<string, any>> {
-  key: any;
+  __typename: string;
+  [key: string]: any;
   [OBJECT_SUBSCHEMA_SYMBOL]: GraphQLSchema | SubschemaConfig<any, any, any, TContext>;
   [INITIAL_POSSIBLE_FIELDS]: GraphQLFieldMap<any, any>;
   [FIELD_SUBSCHEMA_MAP_SYMBOL]: Record<string, GraphQLSchema | SubschemaConfig<any, any, any, TContext>>;
