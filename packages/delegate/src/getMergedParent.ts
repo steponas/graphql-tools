@@ -153,20 +153,16 @@ function getMergedParentsFromFieldNodes(
   });
 
   const nextPromise = Promise.all(resultMap.keys())
-    .then(results =>
-      mergeExternalObjects(
-        info.schema,
-        responsePathAsArray(info.path),
-        object.__typename,
-        object,
-        results,
-        Array.from(resultMap.values())
-      )
-    )
-    .then(mergedParent =>
-      getMergedParentsFromFieldNodes(
+    .then(results => getMergedParentsFromFieldNodes(
         mergedTypeInfo,
-        mergedParent,
+        mergeExternalObjects(
+          info.schema,
+          responsePathAsArray(info.path),
+          object.__typename,
+          object,
+          results,
+          Array.from(resultMap.values())
+        ),
         unproxiableFieldNodes,
         combineSubschemas(sourceSubschemaOrSourceSubschemas, proxiableSubschemas),
         nonProxiableSubschemas,
