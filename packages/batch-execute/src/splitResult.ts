@@ -5,9 +5,9 @@ import { ExecutionResult, GraphQLError } from 'graphql';
 import isPromise from 'is-promise';
 
 import { AsyncExecutionResult, isAsyncIterable, relocatedError } from '@graphql-tools/utils';
-import { split } from '@graphql-tools/pubsub';
 
 import { parseKey } from './prefix';
+import { split } from './split';
 
 export function splitResult(
   mergedResult:
