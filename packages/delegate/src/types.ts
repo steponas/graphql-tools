@@ -23,6 +23,7 @@ import {
   UNPATHED_ERRORS_SYMBOL,
   RECEIVER_MAP_SYMBOL,
   INITIAL_POSSIBLE_FIELDS,
+  INFO_SYMBOL,
 } from './symbols';
 
 import { Subschema } from './Subschema';
@@ -202,6 +203,7 @@ export interface ExternalObject<TContext = Record<string, any>> {
   [key: string]: any;
   [OBJECT_SUBSCHEMA_SYMBOL]: GraphQLSchema | SubschemaConfig<any, any, any, TContext>;
   [INITIAL_POSSIBLE_FIELDS]: GraphQLFieldMap<any, any>;
+  [INFO_SYMBOL]: GraphQLResolveInfo;
   [FIELD_SUBSCHEMA_MAP_SYMBOL]: Record<string, GraphQLSchema | SubschemaConfig<any, any, any, TContext>>;
   [UNPATHED_ERRORS_SYMBOL]: Array<GraphQLError>;
   [RECEIVER_MAP_SYMBOL]: Map<GraphQLSchema | SubschemaConfig, Receiver>;

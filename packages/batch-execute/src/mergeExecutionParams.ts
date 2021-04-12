@@ -16,7 +16,7 @@ import {
   InlineFragmentNode,
   FieldNode,
   OperationTypeNode,
-  GraphQLSchema,
+//  GraphQLSchema,
 } from 'graphql';
 
 import { ExecutionParams } from '@graphql-tools/utils';
@@ -64,7 +64,7 @@ import { createPrefix } from './prefix';
  */
 export function mergeExecutionParams(
   executionParamSets: Array<ExecutionParams>,
-  targetSchema: GraphQLSchema,
+  //targetSchema: GraphQLSchema,
   extensionsReducer: (mergedExtensions: Record<string, any>, executionParams: ExecutionParams) => Record<string, any>
 ): ExecutionParams {
   const mergedVariables: Record<string, any> = Object.create(null);
