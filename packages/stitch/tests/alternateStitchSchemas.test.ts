@@ -209,16 +209,13 @@ describe('merge schemas through transforms', () => {
         },
         Bookings_Booking: {
           property: {
-            selectionSet: () => ({
-              kind: Kind.SELECTION_SET,
-              selections: [{
-                kind: Kind.FIELD,
-                name: {
-                  kind: Kind.NAME,
-                  value: 'propertyId',
-                }
-              }]
-            }),
+            selectionSet: () => () => [{
+              kind: Kind.FIELD,
+              name: {
+                kind: Kind.NAME,
+                value: 'propertyId',
+              }
+            }],
             resolve: (parent, _args, context, info) =>
               delegateToSchema({
                 schema: propertySubschema,

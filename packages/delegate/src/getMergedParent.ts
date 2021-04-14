@@ -6,7 +6,6 @@ import {
   SelectionSetNode,
   responsePathAsArray,
   getNamedType,
-  GraphQLSchema,
   print,
   GraphQLFieldMap,
 } from 'graphql';
@@ -15,7 +14,7 @@ import isPromise from 'is-promise';
 
 import DataLoader from 'dataloader';
 
-import { collectFields, getResponseKeyFromInfo, GraphQLExecutionContext } from '@graphql-tools/utils';
+import { getResponseKeyFromInfo } from '@graphql-tools/utils';
 
 import { ExternalObject, MergedTypeInfo, StitchingInfo } from './types';
 import { getInfo, getSubschema, mergeExternalObjects } from './externalObjects';
@@ -66,14 +65,19 @@ async function getMergedParentsFromInfos(
 
   const keyFieldNodes: Map<string, FieldNode> = new Map();
 
-  const parentType = schema.getType(parentTypeName) as GraphQLObjectType;
-
-  const fieldSelectionSets = stitchingInfo?.selectionSetsByField?.[parentTypeName];
+  const typeFieldNodes = stitchingInfo?.fieldNodesByField?.[parentTypeName];
+  const typeDynamicFieldNodes = stitchingInfo?.dynamicFieldNodesByField?.[parentTypeName];
   infos.forEach(info => {
     const fieldName = info.fieldName;
-    const fieldSelectionSet = fieldSelectionSets[fieldName];
-    if (fieldSelectionSet !== undefined) {
-      addSelectionSetToMap(keyFieldNodes, schema, parentType, sourceSubschemaFields, fieldSelectionSet);
+    const fieldNodesByField = typeFieldNodes?.[fieldName];
+    if (fieldNodesByField !== undefined) {
+      addFieldNodesToMap(keyFieldNodes, sourceSubschemaFields, fieldNodesByField);
+    }
+    const dynamicFieldNodesByField = typeDynamicFieldNodes?.[fieldName];
+    if (dynamicFieldNodesByField !== undefined) {
+      info.fieldNodes.forEach(fieldNode => {
+        addFieldNodesToMap(keyFieldNodes, sourceSubschemaFields, dynamicFieldNodesByField(fieldNode));
+      });
     }
   });
 
@@ -346,35 +350,18 @@ function typesContainSelectionSet(types: Array<GraphQLObjectType>, selectionSet:
   return true;
 }
 
-function addSelectionSetToMap(
+function addFieldNodesToMap(
   map: Map<string, FieldNode>,
-  schema: GraphQLSchema,
-  type: GraphQLObjectType,
   fields: GraphQLFieldMap<any, any>,
-  selectionSet: SelectionSetNode
+  fieldNodes: Array<FieldNode>,
 ): void {
-  const partialExecutionContext = ({
-    schema,
-    variableValues: Object.create(null),
-    fragments: Object.create(null),
-  } as unknown) as GraphQLExecutionContext;
-  const responseKeys = collectFields(
-    partialExecutionContext,
-    type,
-    selectionSet,
-    Object.create(null),
-    Object.create(null)
-  );
-
-  Object.values(responseKeys).forEach(fieldNodes => {
-    const fieldName = fieldNodes[0].name.value;
+  fieldNodes.forEach(fieldNode => {
+    const fieldName = fieldNode.name.value;
     if (!(fieldName in fields)) {
-      fieldNodes.forEach(fieldNode => {
-        const key = print(fieldNode);
-        if (!map.has(key)) {
-          map.set(key, fieldNode);
-        }
-      });
+      const key = print(fieldNode);
+      if (!map.has(key)) {
+        map.set(key, fieldNode);
+      }
     }
   });
 }

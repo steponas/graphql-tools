@@ -1,6 +1,6 @@
 import { Transform, StitchingInfo, DelegationContext } from './types';
 
-import AddSelectionSets from './transforms/AddSelectionSets';
+import AddFieldNodes from './transforms/AddFieldNodes';
 import ExpandAbstractTypes from './transforms/ExpandAbstractTypes';
 import WrapConcreteTypes from './transforms/WrapConcreteTypes';
 import FilterToSchema from './transforms/FilterToSchema';
@@ -17,7 +17,7 @@ export function defaultDelegationBinding(delegationContext: DelegationContext): 
   if (stitchingInfo != null) {
     delegationTransforms.push(
       new ExpandAbstractTypes(),
-      new AddSelectionSets(stitchingInfo.selectionSetsByField, stitchingInfo.dynamicSelectionSetsByField)
+      new AddFieldNodes(stitchingInfo.fieldNodesByField, stitchingInfo.dynamicFieldNodesByField)
     );
   } else if (info != null) {
     delegationTransforms.push(new ExpandAbstractTypes());
