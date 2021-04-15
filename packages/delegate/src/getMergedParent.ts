@@ -396,7 +396,7 @@ function addFieldNodesToMap(
 
 async function slowRace<T extends unknown>(promises: Array<Promise<T>>): Promise<T> {
   let last: T;
-  for await (let result of Repeater.merge(promises)) {
+  for await (const result of Repeater.merge(promises)) {
     last = result;
   }
   return last;
