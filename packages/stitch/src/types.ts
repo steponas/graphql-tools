@@ -56,6 +56,7 @@ export interface MergedTypeInfo<TContext = Record<string, any>> {
   targetSubschemas: Map<Subschema<any, any, any, TContext>, Array<Subschema<any, any, any, TContext>>>;
   uniqueFields: Record<string, Subschema<any, any, any, TContext>>;
   nonUniqueFields: Record<string, Array<Subschema<any, any, any, TContext>>>;
+  subschemaFields: Record<string, boolean>;
   typeMaps: Map<GraphQLSchema | SubschemaConfig<any, any, any, TContext>, TypeMap>;
   selectionSets: Map<Subschema<any, any, any, TContext>, SelectionSetNode>;
   fieldSelectionSets: Map<Subschema<any, any, any, TContext>, Record<string, SelectionSetNode>>;

@@ -20,6 +20,7 @@ import { ExternalObject, MergedTypeInfo, StitchingInfo } from './types';
 import { getInfo, getSubschema, mergeExternalObjects } from './externalObjects';
 import { memoize4, memoize3, memoize2 } from './memoize';
 import { Subschema } from './Subschema';
+import { Repeater } from '@repeaterjs/repeater';
 
 const loaders: WeakMap<any, DataLoader<GraphQLResolveInfo, Promise<ExternalObject>>> = new WeakMap();
 
@@ -60,28 +61,48 @@ async function getMergedParentsFromInfos(
 
   const sourceSubschemaParentType = sourceSubschema.transformedSchema.getType(parentTypeName) as GraphQLObjectType;
   const sourceSubschemaFields = sourceSubschemaParentType.getFields();
-
-  let fieldNodes: Array<FieldNode> = [].concat(...infos.map(info => info.fieldNodes));
-
-  const keyFieldNodes: Map<string, FieldNode> = new Map();
-
+  const subschemaFields = mergedTypeInfo.subschemaFields;
+  const keyResponseKeys: Record<string, Set<string>> = Object.create(null);
+  const keyFieldNodeMap: Map<string, FieldNode> = new Map();
   const typeFieldNodes = stitchingInfo?.fieldNodesByField?.[parentTypeName];
   const typeDynamicFieldNodes = stitchingInfo?.dynamicFieldNodesByField?.[parentTypeName];
+
+  let fieldNodes: Array<FieldNode> = [];
   infos.forEach(info => {
+    const responseKey = getResponseKeyFromInfo(info);
     const fieldName = info.fieldName;
+    if (subschemaFields[fieldName] !== undefined) {
+      fieldNodes.push(...info.fieldNodes);
+    } else {
+      if (keyResponseKeys[responseKey] === undefined) {
+        keyResponseKeys[responseKey] = new Set();
+      }
+    }
+
+    const keyFieldNodes: Array<FieldNode> = [];
+
     const fieldNodesByField = typeFieldNodes?.[fieldName];
     if (fieldNodesByField !== undefined) {
-      addFieldNodesToMap(keyFieldNodes, sourceSubschemaFields, fieldNodesByField);
+      keyFieldNodes.push(...fieldNodesByField);
     }
+
     const dynamicFieldNodesByField = typeDynamicFieldNodes?.[fieldName];
     if (dynamicFieldNodesByField !== undefined) {
       info.fieldNodes.forEach(fieldNode => {
-        addFieldNodesToMap(keyFieldNodes, sourceSubschemaFields, dynamicFieldNodesByField(fieldNode));
+        keyFieldNodes.push(...dynamicFieldNodesByField(fieldNode));
       });
     }
+
+    if (keyResponseKeys[responseKey] !== undefined) {
+      keyFieldNodes.forEach(fieldNode => {
+        const keyResponseKey = fieldNode.alias?.value ?? fieldNode.name.value;
+        keyResponseKeys[responseKey].add(keyResponseKey);
+      });
+    }
+    addFieldNodesToMap(keyFieldNodeMap, sourceSubschemaFields, keyFieldNodes);
   });
 
-  fieldNodes = fieldNodes.concat(...Array.from(keyFieldNodes.values()));
+  fieldNodes = fieldNodes.concat(...Array.from(keyFieldNodeMap.values()));
 
   const mergedParents = getMergedParentsFromFieldNodes(
     mergedTypeInfo,
@@ -93,7 +114,14 @@ async function getMergedParentsFromInfos(
     parentInfo
   );
 
-  return infos.map(info => mergedParents[getResponseKeyFromInfo(info)]);
+  return infos.map(info => {
+    const responseKey = getResponseKeyFromInfo(info);
+    if (keyResponseKeys[responseKey] === undefined) {
+      return mergedParents[responseKey];
+    }
+
+    return slowRace(Array.from(keyResponseKeys[responseKey].values()).map(keyResponseKey => mergedParents[keyResponseKey]));
+  });
 }
 
 function getMergedParentsFromFieldNodes(
@@ -364,4 +392,12 @@ function addFieldNodesToMap(
       }
     }
   });
+}
+
+async function slowRace<T extends unknown>(promises: Array<Promise<T>>): Promise<T> {
+  let last: T;
+  for await (let result of Repeater.merge(promises)) {
+    last = result;
+  }
+  return last;
 }

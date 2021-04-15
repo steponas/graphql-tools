@@ -157,6 +157,7 @@ function createMergedTypes(
           fieldSelectionSets,
           uniqueFields: Object.create({}),
           nonUniqueFields: Object.create({}),
+          subschemaFields: Object.create({}),
           resolvers,
         };
 
@@ -166,6 +167,7 @@ function createMergedTypes(
           } else {
             mergedTypes[typeName].nonUniqueFields[fieldName] = supportedBySubschemas[fieldName];
           }
+          mergedTypes[typeName].subschemaFields[fieldName] = true;
         });
       }
     }
