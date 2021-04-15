@@ -12,7 +12,7 @@ export default class AddFieldNodes implements Transform {
 
   constructor(
     fieldNodesByField: Record<string, Record<string, Array<FieldNode>>>,
-    dynamicFieldNodesByField: Record<string, Record<string, (node: FieldNode) => Array<FieldNode>>>
+    dynamicFieldNodesByField: Record<string, Record<string, Array<(node: FieldNode) => Array<FieldNode>>>>
   ) {
     this.transformer = new VisitSelectionSets((node, typeInfo) =>
       visitSelectionSet(node, typeInfo, fieldNodesByField, dynamicFieldNodesByField)
@@ -32,7 +32,7 @@ function visitSelectionSet(
   node: SelectionSetNode,
   typeInfo: TypeInfo,
   fieldNodesByField: Record<string, Record<string, Array<FieldNode>>>,
-  dynamicFieldNodesByField: Record<string, Record<string, (node: FieldNode) => Array<FieldNode>>>
+  dynamicFieldNodesByField: Record<string, Record<string, Array<(node: FieldNode) => Array<FieldNode>>>>
 ): SelectionSetNode {
   const parentType = typeInfo.getParentType();
 
@@ -60,10 +60,12 @@ function visitSelectionSet(
           const name = selection.name.value;
           const dynamicFieldNodes = dynamicFieldNodesByField[parentTypeName][name];
           if (dynamicFieldNodes != null) {
-            const fieldNodes = dynamicFieldNodes(selection);
-            if (fieldNodes != null) {
-              addSelectionsToMap(newSelections, fieldNodes);
-            }
+            dynamicFieldNodes.forEach(fieldNodeFn => {
+              const fieldNodes = fieldNodeFn(selection);
+              if (fieldNodes != null) {
+                addSelectionsToMap(newSelections, fieldNodes);
+              }
+            });
           }
         }
       });

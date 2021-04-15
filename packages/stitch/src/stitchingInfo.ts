@@ -230,7 +230,7 @@ export function completeStitchingInfo(
     });
   });
 
-  const dynamicFieldNodesByField = Object.create(null);
+  const dynamicFieldNodesByField:Record<string, Record<string, Array<(fieldNode: FieldNode) => Array<FieldNode>>>> = Object.create(null);
 
   Object.keys(resolvers).forEach(typeName => {
     const typeEntry = resolvers[typeName];

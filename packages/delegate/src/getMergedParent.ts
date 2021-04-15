@@ -89,7 +89,9 @@ async function getMergedParentsFromInfos(
     const dynamicFieldNodesByField = typeDynamicFieldNodes?.[fieldName];
     if (dynamicFieldNodesByField !== undefined) {
       info.fieldNodes.forEach(fieldNode => {
-        keyFieldNodes.push(...dynamicFieldNodesByField(fieldNode));
+        dynamicFieldNodesByField.forEach(fieldNodeFn => {
+          keyFieldNodes.push(...fieldNodeFn(fieldNode));
+        });
       });
     }
 
