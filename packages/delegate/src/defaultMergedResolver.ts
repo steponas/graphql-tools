@@ -38,6 +38,8 @@ export function defaultMergedResolver(
   const initialPossibleFields = getInitialPossibleFields(parent);
 
   if (initialPossibleFields === undefined) {
+    // TODO: can this be removed in the next major release?
+    // legacy use of  delegation without setting transformedSchema
     const data = parent[responseKey];
     if (data !== undefined) {
       const unpathedErrors = getUnpathedErrors(parent);

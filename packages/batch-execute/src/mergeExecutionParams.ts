@@ -16,7 +16,7 @@ import {
   InlineFragmentNode,
   FieldNode,
   OperationTypeNode,
-  // GraphQLSchema,
+  GraphQLSchema,
 } from 'graphql';
 
 import { ExecutionParams } from '@graphql-tools/utils';
@@ -64,7 +64,7 @@ import { createPrefix } from './prefix';
  */
 export function mergeExecutionParams(
   executionParamSets: Array<ExecutionParams>,
-  // targetSchema: GraphQLSchema,
+  targetSchema: GraphQLSchema,
   extensionsReducer: (mergedExtensions: Record<string, any>, executionParams: ExecutionParams) => Record<string, any>
 ): ExecutionParams {
   const mergedVariables: Record<string, any> = Object.create(null);
@@ -82,16 +82,8 @@ export function mergeExecutionParams(
     prefixedExecutionParams.document.definitions.forEach(def => {
       if (isOperationDefinition(def)) {
         operation = def.operation;
-        const selections = def.selectionSet.selections;
 
-        // TODO:
-        // once splitting AsyncIterableIterator<AsyncExecutionResult> is implemented within splitResult,
-        // the below code can be uncommented to also utilize defer when batching.
-
-        /*
-        let selections: Array<SelectionNode>;
-
-        selections = targetSchema.getDirective('defer')
+        const selections = targetSchema.getDirective('defer')
           ? [
               {
                 kind: Kind.INLINE_FRAGMENT,
@@ -113,12 +105,11 @@ export function mergeExecutionParams(
                 ],
                 selectionSet: {
                   kind: Kind.SELECTION_SET,
-                  selections,
+                  selections: def.selectionSet.selections,
                 },
               },
             ]
-          : selections;
-        */
+          : def.selectionSet.selections;
 
         mergedSelections.push(...selections);
         mergedVariableDefinitions.push(...(def.variableDefinitions ?? []));
@@ -156,7 +147,7 @@ export function mergeExecutionParams(
 
 function prefixExecutionParams(prefix: string, executionParams: ExecutionParams): ExecutionParams {
   let document = aliasTopLevelFields(prefix, executionParams.document);
-  const variableNames = Object.keys(executionParams.variables);
+  const variableNames = executionParams.variables !== undefined ? Object.keys(executionParams.variables) : [];
 
   if (variableNames.length === 0) {
     return { ...executionParams, document };

@@ -1,4 +1,4 @@
-import { GraphQLFieldResolver, GraphQLObjectType, GraphQLResolveInfo, OperationTypeNode } from 'graphql';
+import { GraphQLFieldResolver, GraphQLObjectType, GraphQLResolveInfo, GraphQLSchema, OperationTypeNode } from 'graphql';
 
 import { getResponseKeyFromInfo } from '@graphql-tools/utils';
 import {
@@ -14,12 +14,15 @@ import {
 } from '@graphql-tools/delegate';
 
 export function generateProxyingResolvers(
-  subschemaConfig: SubschemaConfig
+  subschemaConfig: SubschemaConfig,
+  transformedSchema?: GraphQLSchema,
 ): Record<string, Record<string, GraphQLFieldResolver<any, any>>> {
   const targetSchema = subschemaConfig.schema;
   const createProxyingResolver = subschemaConfig.createProxyingResolver ?? defaultCreateProxyingResolver;
 
-  const transformedSchema = applySchemaTransforms(targetSchema, subschemaConfig);
+  if (transformedSchema === undefined) {
+    transformedSchema = applySchemaTransforms(targetSchema, subschemaConfig);
+  }
 
   const operationTypes: Record<OperationTypeNode, GraphQLObjectType> = {
     query: targetSchema.getQueryType(),

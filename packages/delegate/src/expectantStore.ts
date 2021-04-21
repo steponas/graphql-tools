@@ -8,6 +8,10 @@ export class ExpectantStore<T> {
   protected cache: Record<string, T> = {};
 
   set(key: string, value: T): void {
+    if (Array.isArray(value)) {
+      value.forEach((v, index) => this.set(`${key}.${index}`, v));
+    }
+
     this.cache[key] = value;
     const settlers = this.settlers[key];
     if (settlers != null) {
@@ -31,7 +35,7 @@ export class ExpectantStore<T> {
     }
 
     let settlers = this.settlers[key];
-    if (settlers != null) {
+    if (settlers === undefined) {
       settlers = this.settlers[key] = new Set();
     }
 
@@ -40,10 +44,10 @@ export class ExpectantStore<T> {
     });
   }
 
-  clear(reason?: any): void {
-    for (const settlers of Object.values(this.settlers)) {
+  clear(): void {
+    for (const [key, settlers] of Object.entries(this.settlers)) {
       for (const { reject } of settlers) {
-        reject(reason);
+        reject(`"${key}" requested, but never provided.`);
       }
     }
 

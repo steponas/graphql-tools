@@ -2,15 +2,18 @@
 // and: https://gist.github.com/jed/cc1e949419d42e2cb26d7f2e1645864d
 // and also: https://github.com/repeaterjs/repeater/issues/48#issuecomment-569134039
 
-import { Push, Repeater } from '@repeaterjs/repeater';
+import { Push, Stop, Repeater } from '@repeaterjs/repeater';
 
-type Splitter<T> = (item: T) => [number, T];
+type Splitter<T> = (item: T) => [number | undefined, T];
 
-export function split<T>(asyncIterable: AsyncIterableIterator<T>, n: number, splitter: Splitter<IteratorResult<T>>) {
+export function split<T>(asyncIterable: AsyncIterableIterator<T>, n: number, splitter: Splitter<T>) {
   const iterator = asyncIterable[Symbol.asyncIterator]();
-  const returner = iterator.return ?? undefined;
+  const returner = iterator.return?.bind(iterator) ?? undefined;
 
-  const buffers: Array<Array<IteratorResult<T>>> = Array(n).fill([]);
+  const buffers: Array<Array<IteratorResult<T>>> = Array(n);
+  for (let i = 0; i < n; i++) {
+    buffers[i] = [];
+  };
 
   if (returner) {
     const set: Set<number> = new Set();
@@ -25,7 +28,7 @@ export function split<T>(asyncIterable: AsyncIterableIterator<T>, n: number, spl
           }
         });
 
-        await loop(push, earlyReturn, buffer, index, buffers, iterator, splitter);
+        await loop(push, stop, earlyReturn, buffer, buffers, iterator, splitter);
 
         await earlyReturn;
       });
@@ -33,14 +36,14 @@ export function split<T>(asyncIterable: AsyncIterableIterator<T>, n: number, spl
   }
 
   return buffers.map(
-    (buffer, index) =>
+    buffer =>
       new Repeater(async (push, stop) => {
         let earlyReturn: any;
         stop.then(() => {
           earlyReturn = returner ? returner() : true;
         });
 
-        await loop(push, earlyReturn, buffer, index, buffers, iterator, splitter);
+        await loop(push, stop, earlyReturn, buffer, buffers, iterator, splitter);
 
         await earlyReturn;
       })
@@ -49,16 +52,16 @@ export function split<T>(asyncIterable: AsyncIterableIterator<T>, n: number, spl
 
 async function loop<T>(
   push: Push<T>,
+  stop: Stop,
   earlyReturn: Promise<any> | any,
   buffer: Array<IteratorResult<T>>,
-  index: number,
   buffers: Array<Array<IteratorResult<T>>>,
   iterator: AsyncIterator<T>,
-  splitter: Splitter<IteratorResult<T>>
+  splitter: Splitter<T>
 ): Promise<void> {
   /* eslint-disable no-unmodified-loop-condition */
   while (!earlyReturn) {
-    const iteration = await next(buffer, index, buffers, iterator, splitter);
+    const iteration = await next(buffer, buffers, iterator, splitter);
 
     if (iteration === undefined) {
       continue;
@@ -76,32 +79,38 @@ async function loop<T>(
 
 async function next<T>(
   buffer: Array<IteratorResult<T>>,
-  index: number,
   buffers: Array<Array<IteratorResult<T>>>,
   iterator: AsyncIterator<T>,
-  splitter: Splitter<IteratorResult<T>>
+  splitter: Splitter<T>
 ): Promise<IteratorResult<T> | undefined> {
-  let iteration: IteratorResult<T>;
-
   if (0 in buffer) {
     return buffer.shift();
   }
 
   const iterationCandidate = await iterator.next();
 
+  let tee = true;
   const value = iterationCandidate.value;
-  if (value) {
+  if (value !== undefined) {
     const [iterationIndex, newValue] = splitter(value);
-    if (index === iterationIndex) {
-      return newValue;
+    if (iterationIndex !== undefined) {
+      buffers[iterationIndex].push({
+        ...iterationCandidate,
+        value: newValue,
+      });
+      tee = false;
     }
-
-    buffers[iterationIndex].push(iteration);
-    return undefined;
   }
 
-  for (const buffer of buffers) {
-    buffer.push(iteration);
+  if (tee) {
+    for (const b of buffers) {
+      b.push(iterationCandidate);
+    }
   }
-  return iterationCandidate;
+
+  if (0 in buffer) {
+    return buffer.shift();
+  };
+
+  return undefined;
 }

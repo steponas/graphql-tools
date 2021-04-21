@@ -4,7 +4,7 @@ import { ExecutionResult, GraphQLError } from 'graphql';
 
 import isPromise from 'is-promise';
 
-import { AsyncExecutionResult, isAsyncIterable, relocatedError } from '@graphql-tools/utils';
+import { AsyncExecutionResult, ExecutionPatchResult, isAsyncIterable, relocatedError } from '@graphql-tools/utils';
 
 import { parseKey } from './prefix';
 import { split } from './split';
@@ -39,8 +39,72 @@ export function splitExecutionResultOrAsyncIterableIterator(
 ): Array<ExecutionResult | AsyncIterableIterator<AsyncExecutionResult>> {
   if (isAsyncIterable(mergedResult)) {
     return split(mergedResult, numResults, originalResult => {
-      // TODO: implement splitter instead of this placeholder
-      return [0, originalResult];
+      const path = (originalResult as ExecutionPatchResult).path;
+      if (path && path.length) {
+        const { index, originalKey } = parseKey(path[0] as string);
+        const newPath = ([originalKey] as Array<string | number>).concat(path.slice(1));
+
+        const newResult: ExecutionPatchResult = {
+          ...(originalResult as ExecutionPatchResult),
+          path: newPath,
+        };
+
+        const errors = originalResult.errors;
+        if (errors) {
+          const newErrors: Array<GraphQLError> = [];
+          errors.forEach(error => {
+            if (error.path) {
+              const parsedKey = parseKey(error.path[0] as string);
+              if (parsedKey) {
+                const { originalKey } = parsedKey;
+                const newError = relocatedError(error, [originalKey, ...error.path.slice(1)]);
+                newErrors.push(newError);
+                return;
+              }
+            }
+
+            newErrors.push(error);
+          });
+          newResult.errors = newErrors;
+        }
+
+        return [index, newResult];
+      }
+
+      let resultIndex: number;
+      const newResult: ExecutionResult = { ...originalResult };
+      const data = originalResult.data;
+      if (data) {
+        const newData = {};
+        Object.keys(data).forEach(prefixedKey => {
+          const { index, originalKey } = parseKey(prefixedKey);
+          resultIndex = index;
+          newData[originalKey] = data[prefixedKey];
+        });
+        newResult.data = newData;
+      }
+
+      const errors = originalResult.errors;
+      if (errors) {
+        const newErrors: Array<GraphQLError> = [];
+        errors.forEach(error => {
+          if (error.path) {
+            const parsedKey = parseKey(error.path[0] as string);
+            if (parsedKey) {
+              const { index, originalKey } = parsedKey;
+              resultIndex = index;
+              const newError = relocatedError(error, [originalKey, ...error.path.slice(1)]);
+              newErrors.push(newError);
+              return;
+            }
+          }
+
+          newErrors.push(error);
+        });
+        newResult.errors = newErrors;
+      }
+
+      return [resultIndex, newResult]
     });
   }
 

@@ -169,7 +169,7 @@ export function delegateRequest<TContext = Record<string, any>, TArgs = any>({
         executor as <TReturn, TArgs, TContext>(
           params: ExecutionParams<TArgs, TContext>
         ) => ExecutionResult<TReturn> | Promise<ExecutionResult<TReturn>>,
-        // targetSchema,
+        targetSchema,
         batchingOptions?.dataLoaderOptions,
         batchingOptions?.extensionsReducer
       ) as Executor;

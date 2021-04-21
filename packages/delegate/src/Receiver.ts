@@ -15,7 +15,7 @@ import DataLoader from 'dataloader';
 
 import { Repeater, Stop } from '@repeaterjs/repeater';
 
-import { AsyncExecutionResult } from '@graphql-tools/utils';
+import { AsyncExecutionResult, getResponseKeyFromInfo } from '@graphql-tools/utils';
 
 import { DelegationContext, ExternalObject } from './types';
 import { getReceiver, getSubschema, getUnpathedErrors, mergeExternalObjects } from './externalObjects';
@@ -64,10 +64,16 @@ export class Receiver {
   }
 
   public async getInitialResult(): Promise<ExecutionResult> {
-    const asyncIterator = this.asyncIterable[Symbol.asyncIterator]();
-    const payload = await asyncIterator.next();
-    const initialResult = externalValueFromResult(this.resultTransformer(payload.value), this.delegationContext, this);
-    this.cache.set(this.fieldName, initialResult);
+    let initialResult: any;
+    const payloads: Array<any> = [];
+    for await (const payload of this.asyncIterable) {
+      initialResult = externalValueFromResult(this.resultTransformer(payload), this.delegationContext, this);
+      payloads.push(payload);
+      if (initialResult != null) {
+        break;
+      }
+    }
+    this.cache.set(getResponseKeyFromInfo(this.delegationContext.info), initialResult);
 
     this._iterate();
 
@@ -110,7 +116,11 @@ export class Receiver {
       this.onNewInfo(pathKey, combinedInfo);
     }
 
-    const parent = await this.cache.request(parentKey);
+    const parent = this.cache.get(parentKey);
+
+    if (parent === undefined) {
+      throw new Error(`Parent with key "${parentKey}" not available.`)
+    }
 
     const data = parent[responseKey];
     if (data !== undefined) {

@@ -1,4 +1,4 @@
-import { getOperationAST /*, GraphQLSchema */ } from 'graphql';
+import { getOperationAST, GraphQLSchema } from 'graphql';
 
 import DataLoader from 'dataloader';
 
@@ -9,12 +9,12 @@ import { splitResult } from './splitResult';
 
 export function createBatchingExecutor(
   executor: Executor,
-  // targetSchema: GraphQLSchema,
+  targetSchema: GraphQLSchema,
   dataLoaderOptions?: DataLoader.Options<any, any, any>,
   extensionsReducer?: (mergedExtensions: Record<string, any>, executionParams: ExecutionParams) => Record<string, any>
 ): Executor {
   const loader = new DataLoader(
-    createLoadFn(executor, /* targetSchema, */ extensionsReducer ?? defaultExtensionsReducer),
+    createLoadFn(executor, targetSchema, extensionsReducer ?? defaultExtensionsReducer),
     dataLoaderOptions
   );
   return (executionParams: ExecutionParams) => loader.load(executionParams);
@@ -30,7 +30,7 @@ function createLoadFn(
     | ExecutionResult
     | AsyncIterableIterator<AsyncExecutionResult>
     | Promise<ExecutionResult | AsyncIterableIterator<AsyncExecutionResult>>,
-  // targetSchema: GraphQLSchema,
+  targetSchema: GraphQLSchema,
   extensionsReducer: (mergedExtensions: Record<string, any>, executionParams: ExecutionParams) => Record<string, any>
 ) {
   return async (
@@ -64,7 +64,7 @@ function createLoadFn(
       | Promise<ExecutionResult | AsyncIterableIterator<ExecutionResult>>
     > = [];
     batchedExecutionParamSets.forEach(batchedExecutionParamSet => {
-      const mergedExecutionParams = mergeExecutionParams(batchedExecutionParamSet, /* targetSchema, */ extensionsReducer);
+      const mergedExecutionParams = mergeExecutionParams(batchedExecutionParamSet, targetSchema, extensionsReducer);
       const executionResult = executor(mergedExecutionParams);
       results = results.concat(splitResult(executionResult, batchedExecutionParamSet.length));
     });
